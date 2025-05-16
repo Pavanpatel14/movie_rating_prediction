@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Rating Predictor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Movie Rating Predictor</h1>
+            <p>Predict movie ratings using machine learning models</p>
+        </header>
+
+        <div class="main-content">
+            <div class="card">
+                <h2>Generate Movie Dataset</h2>
+                <form id="generate-form">
+                    <div class="form-group">
+                        <label for="n_samples">Number of samples:</label>
+                        <input type="number" id="n_samples" name="n_samples" value="1000" min="100" max="10000">
+                    </div>
+                    <button type="submit" class="btn">Generate Data & Train Models</button>
+                </form>
+                <div id="generation-result" class="result-box"></div>
+            </div>
+
+            <div class="card">
+                <h2>Predict Movie Rating</h2>
+                <form id="prediction-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="title">Movie Title:</label>
+                            <input type="text" id="title" name="title" placeholder="Movie Title">
+                        </div>
+                        <div class="form-group">
+                            <label for="year">Release Year:</label>
+                            <input type="number" id="year" name="year" value="2023" min="1950" max="2025">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="budget">Budget (millions $):</label>
+                            <input type="number" id="budget" name="budget" value="50" min="1" max="500" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="duration">Duration (minutes):</label>
+                            <input type="number" id="duration" name="duration" value="120" min="60" max="240">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Genres:</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" name="action"> Action</label>
+                            <label><input type="checkbox" name="comedy"> Comedy</label>
+                            <label><input type="checkbox" name="drama"> Drama</label>
+                            <label><input type="checkbox" name="sci-fi"> Sci-Fi</label>
+                            <label><input type="checkbox" name="horror"> Horror</label>
+                            <label><input type="checkbox" name="romance"> Romance</label>
+                            <label><input type="checkbox" name="thriller"> Thriller</label>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="actor_popularity">Lead Actor Popularity (1-10):</label>
+                            <input type="range" id="actor_popularity" name="actor_popularity" min="1" max="10" value="7" step="0.1">
+                            <span id="actor_value">7.0</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="director_experience">Director Experience (years):</label>
+                            <input type="range" id="director_experience" name="director_experience" min="1" max="40" value="15" step="1">
+                            <span id="director_value">15</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model">Prediction Model:</label>
+                        <select id="model" name="model">
+                            <option value="linear_regression">Linear Regression</option>
+                            <option value="random_forest" selected>Random Forest</option>
+                            <option value="gradient_boosting">Gradient Boosting</option>
+                            <option value="svr">Support Vector Regression</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn">Predict Rating</button>
+                </form>
+
+                <div id="prediction-result" class="result-box">
+                    <div id="rating-display" style="display: none;">
+                        <h3>Predicted Rating</h3>
+                        <div class="rating-value">0.0</div>
+                        <div class="rating-stars">
+                            <div class="stars-outer">
+                                <div class="stars-inner"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Model Performance</h2>
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="metrics">Metrics</button>
+                    <button class="tab-btn" data-tab="chart">Comparison Chart</button>
+                </div>
+                
+                <div id="metrics" class="tab-content active">
+                    {% if model_results %}
+                    <table class="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>MSE</th>
+                                <th>MAE</th>
+                                <th>R²</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for model, results in model_results.items() %}
+                            <tr>
+                                <td>{{ model|replace('_', ' ')|title }}</td>
+                                <td>{{ "%.4f"|format(results.mse) }}</td>
+                                <td>{{ "%.4f"|format(results.mae) }}</td>
+                                <td>{{ "%.4f"|format(results.r2) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="no-data">No model data available. Generate data first.</p>
+                    {% endif %}
+                </div>
+                
+                <div id="chart" class="tab-content">
+                    <canvas id="performance-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Movie Rating Prediction Mini Project © 2025</p>
+    </footer>
+
+    <script>
+        $(document).ready(function() {
+            // Update range input values
+            $('#actor_popularity').on('input', function() {
+                $('#actor_value').text(parseFloat($(this).val()).toFixed(1));
+            });
+            
+            $('#director_experience').on('input', function() {
+                $('#director_value').text(parseInt($(this).val()));
+            });
+            
+            // Tab switching
+            $('.tab-btn').click(function() {
+                $('.tab-btn').removeClass('active');
+                $(this).addClass('active');
+                
+                $('.tab-content').removeClass('active');
+                $('#' + $(this).data('tab')).addClass('active');
+                
+                if ($(this).data('tab') === 'chart') {
+                    updateChart();
+                }
+            });
+            
+            // Generate data form submission
+            $('#generate-form').submit(function(e) {
+                e.preventDefault();
+                
+                $('#generation-result').html('<div class="loading">Generating data and training models...</div>');
+                
+                $.ajax({
+                    url: '/generate_data',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        $('#generation-result').html(
+                            '<div class="success">' + response.message + '</div>'
+                        );
+                        
+                        // Reload page to update model results
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
+                    },
+                    error: function() {
+                        $('#generation-result').html(
+                            '<div class="error">An error occurred. Please try again.</div>'
+                        );
+                    }
+                });
+            });
+            
+            // Prediction form submission
+            $('#prediction-form').submit(function(e) {
+                e.preventDefault();
+                
+                $('#prediction-result').prepend('<div class="loading">Predicting rating...</div>');
+                $('#rating-display').hide();
+                
+                $.ajax({
+                    url: '/predict',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        $('#prediction-result .loading').remove();
+                        
+                        // Update rating display
+                        $('#rating-display').show();
+                        $('#rating-display .rating-value').text(response.rating.toFixed(1));
+                        
+                        // Update stars
+                        const starPercentage = (response.rating / 10) * 100;
+                        $('.stars-inner').css('width', starPercentage + '%');
+                    },
+                    error: function() {
+                        $('#prediction-result .loading').remove();
+                        $('#prediction-result').prepend(
+                            '<div class="error">An error occurred. Please try again.</div>'
+                        );
+                    }
+                });
+            });
+            
+            // Initialize performance chart
+            function updateChart() {
+                {% if model_results %}
+                const ctx = document.getElementById('performance-chart').getContext('2d');
+                
+                // Extract model names and metrics
+                const models = [
+                    {% for model in model_results %}
+                    '{{ model|replace('_', ' ')|title }}',
+                    {% endfor %}
+                ];
+                
+                const mseValues = [
+                    {% for model, results in model_results.items() %}
+                    {{ results.mse }},
+                    {% endfor %}
+                ];
+                
+                const maeValues = [
+                    {% for model, results in model_results.items() %}
+                    {{ results.mae }},
+                    {% endfor %}
+                ];
+                
+                const r2Values = [
+                    {% for model, results in model_results.items() %}
+                    {{ results.r2 }},
+                    {% endfor %}
+                ];
+                
+                // Create chart
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: models,
+                        datasets: [
+                            {
+                                label: 'MSE (lower is better)',
+                                data: mseValues,
+                                backgroundColor: 'rgba(230, 25, 75, 0.7)',
+                                borderColor: 'rgba(230, 25, 75, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'MAE (lower is better)',
+                                data: maeValues,
+                                backgroundColor: 'rgba(60, 180, 75, 0.7)',
+                                borderColor: 'rgba(60, 180, 75, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'R² (higher is better)',
+                                data: r2Values,
+                                backgroundColor: 'rgba(245, 130, 48, 0.7)',
+                                borderColor: 'rgba(245, 130, 48, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+                {% endif %}
+            }
+        });
+    </script>
+</body>
+</html>
